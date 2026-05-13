@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <title>Proyecto Three.js FPS</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="main.css">
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <nav id="navbar">
+        <h1>🍩 Proyecto Three.js FPS</h1>
+    </nav>
+
+    <!-- INFO -->
+    <div id="info">
+        Mantén clic izquierdo para mover cámara 🍩<br>
+        WASD para moverse y SPACE para saltar
+    </div>
+
+    <!-- CONTENEDOR -->
+    <div id="container"></div>
+
+    <!-- FOOTER -->
+    <footer id="footer">
+        <p>Desarrollado por: Roman Resendiz 💻</p>
+        <p>Carrera: Ingeniería en Sistemas Computacionales</p>
+        <p>Maestro: Pinedo Fernandez Victor Manuel</p>
+        <p>Materia: Graficación</p>
+    </footer>
+
+    <script type="module">
+
+        import * as THREE from 'three';
+
+        import Stats from 'three/addons/libs/stats.module.js';
+
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        import { Octree } from 'three/addons/math/Octree.js';
+        import { OctreeHelper } from 'three/addons/helpers/OctreeHelper.js';
+
+        import { Capsule } from 'three/addons/math/Capsule.js';
+
+        import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+        // ESCENA
+
+        const scene = new THREE.Scene();
+        const clock = new THREE.Clock();
+
+        scene.background = new THREE.Color(0x88ccee);
+        scene.fog = new THREE.Fog(0x88ccee, 0, 50);
+
+        // CAMARA
+
+        const camera = new THREE.PerspectiveCamera(
+            70,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+
+        camera.rotation.order = 'YXZ';
+
+        // LUCES
+
+        const fillLight1 = new THREE.HemisphereLight(
+            0x8dc1de,
+            0x00668d,
+            1.5
+        );
+
+        fillLight1.position.set(2, 1, 1);
+
+        scene.add(fillLight1);
+
+        const directionalLight = new THREE.DirectionalLight(
+            0xffffff,
+            2.5
+        );
+
+        directionalLight.position.set(-5, 25, -1);
+
+        directionalLight.castShadow = true;
+
+        scene.add(directionalLight);
+
+        // RENDER
+
+        const container = document.getElementById('container');
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true
+        });
+
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+        renderer.shadowMap.enabled = true;
+
+        renderer.setAnimationLoop(animate);
+
+        container.appendChild(renderer.domElement);
+
+        // STATS
+
+        const stats = new Stats();
+
+        stats.dom.style.position = 'absolute';
+        stats.dom.style.top = '0px';
+
+        container.appendChild(stats.dom);
+
+        // VARIABLES
+
+        const GRAVITY = 30;
+
+        const NUM_SPHERES = 100;
+        const SPHERE_RADIUS = 0.2;
+
+        const STEPS_PER_FRAME = 5;
+
+        // DONAS
+
+        const sphereGeometry = new THREE.TorusGeometry(
+            0.2,
+            0.08,
+            16,
+            100
+        );
+
+        const sphereMaterial = new THREE.MeshToonMaterial({
+            color: 0xff69b4
+        });
+
+        const spheres = [];
+
+        let sphereIdx = 0;
+
+        // CREAR DONAS
+
+        for (let i = 0; i < NUM_SPHERES; i++) {
+
+            const sphere = new THREE.Mesh(
+                sphereGeometry,
+                sphereMaterial
+            );
+
+            sphere.rotation.x = Math.PI / 2;
+
+            // CHISPITAS
+
+            for (let j = 0; j < 25; j++) {
+
+                const sprinkleGeometry =
+                    new THREE.BoxGeometry(
+                        0.01,
+                        0.03,
+                        0.01
+                    );
+
+                const sprinkleMaterial =
+                    new THREE.MeshBasicMaterial({
+                        color: Math.random() * 0xffffff
+                    });
+
+                const sprinkle = new THREE.Mesh(
+                    sprinkleGeometry,
+                    sprinkleMaterial
+                );
+
+                const angle = Math.random() * Math.PI * 2;
+
+                const radius = 0.2;
+
+                sprinkle.position.set(
+                    Math.cos(angle) * radius,
+                    (Math.random() - 0.5) * 0.05,
+                    Math.sin(angle) * radius
+                );
+
+                sphere.add(sprinkle);
+
+            }
+
+            sphere.castShadow = true;
+            sphere.receiveShadow = true;
+
+            scene.add(sphere);
+
+            spheres.push({
+                mesh: sphere,
+                collider: new THREE.Sphere(
+                    new THREE.Vector3(0, -100, 0),
+                    SPHERE_RADIUS
+                ),
+                velocity: new THREE.Vector3()
+            });
+
+        }
+
+        // OCTREE
+
+        const worldOctree = new Octree();
+
+        // PLAYER
+
+        const playerCollider = new Capsule(
+            new THREE.Vector3(0, 0.35, 0),
+            new THREE.Vector3(0, 1, 0),
+            0.35
+        );
+
+        const playerVelocity = new THREE.Vector3();
+        const playerDirection = new THREE.Vector3();
+
+        let playerOnFloor = false;
+        let mouseTime = 0;
+
+        const keyStates = {};
+
+        const vector1 = new THREE.Vector3();
+        const vector2 = new THREE.Vector3();
+        const vector3 = new THREE.Vector3();
+
+        // TECLADO
+
+        document.addEventListener('keydown', (event) => {
+
+            keyStates[event.code] = true;
+
+        });
+
+        document.addEventListener('keyup', (event) => {
+
+            keyStates[event.code] = false;
+
+        });
+
+        // CONTROL MOUSE SIN POINTER LOCK
+
+        let isMouseDown = false;
+
+        container.addEventListener('mousedown', () => {
+
+            isMouseDown = true;
+
+            mouseTime = performance.now();
+
+        });
+
+        document.addEventListener('mouseup', () => {
+
+            if (isMouseDown) {
+
+                throwBall();
+
+            }
+
+            isMouseDown = false;
+
+        });
+
+        document.addEventListener('mousemove', (event) => {
+
+            if (isMouseDown) {
+
+                camera.rotation.y -= event.movementX / 500;
+
+                camera.rotation.x -= event.movementY / 500;
+
+            }
+
+        });
+
+        // RESIZE
+
+        window.addEventListener('resize', onWindowResize);
+
+        function onWindowResize() {
+
+            camera.aspect =
+                window.innerWidth / window.innerHeight;
+
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(
+                window.innerWidth,
+                window.innerHeight
+            );
+
+        }
+
+        // LANZAR DONAS
+
+        function throwBall() {
+
+            const sphere = spheres[sphereIdx];
+
+            camera.getWorldDirection(playerDirection);
+
+            sphere.collider.center
+                .copy(playerCollider.end)
+                .addScaledVector(
+                    playerDirection,
+                    playerCollider.radius * 1.5
+                );
+
+            const impulse =
+                15 +
+                30 *
+                (
+                    1 -
+                    Math.exp(
+                        (mouseTime - performance.now()) * 0.001
+                    )
+                );
+
+            sphere.velocity
+                .copy(playerDirection)
+                .multiplyScalar(impulse);
+
+            sphere.velocity.addScaledVector(
+                playerVelocity,
+                2
+            );
+
+            sphereIdx =
+                (sphereIdx + 1) % spheres.length;
+
+        }
+
+        // COLISIONES PLAYER
+
+        function playerCollisions() {
+
+            const result =
+                worldOctree.capsuleIntersect(
+                    playerCollider
+                );
+
+            playerOnFloor = false;
+
+            if (result) {
+
+                playerOnFloor =
+                    result.normal.y > 0;
+
+                if (!playerOnFloor) {
+
+                    playerVelocity.addScaledVector(
+                        result.normal,
+                        -result.normal.dot(
+                            playerVelocity
+                        )
+                    );
+
+                }
+
+                playerCollider.translate(
+                    result.normal.multiplyScalar(
+                        result.depth
+                    )
+                );
+
+            }
+
+        }
+
+        // UPDATE PLAYER
+
+        function updatePlayer(deltaTime) {
+
+            let damping =
+                Math.exp(-4 * deltaTime) - 1;
+
+            if (!playerOnFloor) {
+
+                playerVelocity.y -=
+                    GRAVITY * deltaTime;
+
+                damping *= 0.1;
+
+            }
+
+            playerVelocity.addScaledVector(
+                playerVelocity,
+                damping
+            );
+
+            const deltaPosition =
+                playerVelocity.clone()
+                    .multiplyScalar(deltaTime);
+
+            playerCollider.translate(deltaPosition);
+
+            playerCollisions();
+
+            camera.position.copy(
+                playerCollider.end
+            );
+
+        }
+
+        // PLAYER VS DONAS
+
+        function playerSphereCollision(sphere) {
+
+            const center = vector1
+                .addVectors(
+                    playerCollider.start,
+                    playerCollider.end
+                )
+                .multiplyScalar(0.5);
+
+            const sphere_center =
+                sphere.collider.center;
+
+            const r =
+                playerCollider.radius +
+                sphere.collider.radius;
+
+            const r2 = r * r;
+
+            for (const point of [
+                playerCollider.start,
+                playerCollider.end,
+                center
+            ]) {
+
+                const d2 =
+                    point.distanceToSquared(
+                        sphere_center
+                    );
+
+                if (d2 < r2) {
+
+                    const normal = vector1
+                        .subVectors(
+                            point,
+                            sphere_center
+                        )
+                        .normalize();
+
+                    const v1 = vector2
+                        .copy(normal)
+                        .multiplyScalar(
+                            normal.dot(playerVelocity)
+                        );
+
+                    const v2 = vector3
+                        .copy(normal)
+                        .multiplyScalar(
+                            normal.dot(sphere.velocity)
+                        );
+
+                    playerVelocity.add(v2).sub(v1);
+
+                    sphere.velocity.add(v1).sub(v2);
+
+                }
+
+            }
+
+        }
+
+        // COLISIONES DONAS
+
+        function spheresCollisions() {
+
+            for (let i = 0; i < spheres.length; i++) {
+
+                const s1 = spheres[i];
+
+                for (let j = i + 1; j < spheres.length; j++) {
+
+                    const s2 = spheres[j];
+
+                    const d2 =
+                        s1.collider.center
+                            .distanceToSquared(
+                                s2.collider.center
+                            );
+
+                    const r =
+                        s1.collider.radius +
+                        s2.collider.radius;
+
+                    const r2 = r * r;
+
+                    if (d2 < r2) {
+
+                        const normal = vector1
+                            .subVectors(
+                                s1.collider.center,
+                                s2.collider.center
+                            )
+                            .normalize();
+
+                        const v1 = vector2
+                            .copy(normal)
+                            .multiplyScalar(
+                                normal.dot(s1.velocity)
+                            );
+
+                        const v2 = vector3
+                            .copy(normal)
+                            .multiplyScalar(
+                                normal.dot(s2.velocity)
+                            );
+
+                        s1.velocity.add(v2).sub(v1);
+
+                        s2.velocity.add(v1).sub(v2);
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // UPDATE DONAS
+
+        function updateSpheres(deltaTime) {
+
+            spheres.forEach(sphere => {
+
+                sphere.collider.center
+                    .addScaledVector(
+                        sphere.velocity,
+                        deltaTime
+                    );
+
+                const result =
+                    worldOctree.sphereIntersect(
+                        sphere.collider
+                    );
+
+                if (result) {
+
+                    sphere.velocity.addScaledVector(
+                        result.normal,
+                        -result.normal.dot(
+                            sphere.velocity
+                        ) * 1.5
+                    );
+
+                    sphere.collider.center.add(
+                        result.normal.multiplyScalar(
+                            result.depth
+                        )
+                    );
+
+                } else {
+
+                    sphere.velocity.y -=
+                        GRAVITY * deltaTime;
+
+                }
+
+                const damping =
+                    Math.exp(-1.5 * deltaTime) - 1;
+
+                sphere.velocity.addScaledVector(
+                    sphere.velocity,
+                    damping
+                );
+
+                playerSphereCollision(sphere);
+
+            });
+
+            spheresCollisions();
+
+            for (const sphere of spheres) {
+
+                sphere.mesh.position.copy(
+                    sphere.collider.center
+                );
+
+            }
+
+        }
+
+        // MOVIMIENTO
+
+        function getForwardVector() {
+
+            camera.getWorldDirection(playerDirection);
+
+            playerDirection.y = 0;
+
+            playerDirection.normalize();
+
+            return playerDirection;
+
+        }
+
+        function getSideVector() {
+
+            camera.getWorldDirection(playerDirection);
+
+            playerDirection.y = 0;
+
+            playerDirection.normalize();
+
+            playerDirection.cross(camera.up);
+
+            return playerDirection;
+
+        }
+
+        function controls(deltaTime) {
+
+            const speedDelta =
+                deltaTime * (playerOnFloor ? 25 : 8);
+
+            if (keyStates['KeyW']) {
+
+                playerVelocity.add(
+                    getForwardVector()
+                        .multiplyScalar(speedDelta)
+                );
+
+            }
+
+            if (keyStates['KeyS']) {
+
+                playerVelocity.add(
+                    getForwardVector()
+                        .multiplyScalar(-speedDelta)
+                );
+
+            }
+
+            if (keyStates['KeyA']) {
+
+                playerVelocity.add(
+                    getSideVector()
+                        .multiplyScalar(-speedDelta)
+                );
+
+            }
+
+            if (keyStates['KeyD']) {
+
+                playerVelocity.add(
+                    getSideVector()
+                        .multiplyScalar(speedDelta)
+                );
+
+            }
+
+            if (playerOnFloor) {
+
+                if (keyStates['Space']) {
+
+                    playerVelocity.y = 15;
+
+                }
+
+            }
+
+        }
+
+        // TELEPORT
+
+        function teleportPlayerIfOob() {
+
+            if (camera.position.y <= -25) {
+
+                playerCollider.start.set(
+                    0,
+                    0.35,
+                    0
+                );
+
+                playerCollider.end.set(
+                    0,
+                    1,
+                    0
+                );
+
+                playerCollider.radius = 0.35;
+
+                camera.position.copy(
+                    playerCollider.end
+                );
+
+                camera.rotation.set(0, 0, 0);
+
+            }
+
+        }
+
+        // CARGAR MAPA
+
+        const loader =
+            new GLTFLoader()
+                .setPath('./models/gltf/');
+
+        loader.load(
+            'collision-world.glb',
+            (gltf) => {
+
+                scene.add(gltf.scene);
+
+                worldOctree.fromGraphNode(
+                    gltf.scene
+                );
+
+                gltf.scene.traverse(child => {
+
+                    if (child.isMesh) {
+
+                        child.castShadow = true;
+
+                        child.receiveShadow = true;
+
+                    }
+
+                });
+
+                const helper =
+                    new OctreeHelper(worldOctree);
+
+                helper.visible = false;
+
+                scene.add(helper);
+
+                const gui =
+                    new GUI({ width: 200 });
+
+                gui.add(
+                    { debug: false },
+                    'debug'
+                ).onChange(function (value) {
+
+                    helper.visible = value;
+
+                });
+
+            }
+        );
+
+        // ANIMACION
+
+        function animate() {
+
+            const deltaTime =
+                Math.min(
+                    0.05,
+                    clock.getDelta()
+                ) / STEPS_PER_FRAME;
+
+            for (let i = 0; i < STEPS_PER_FRAME; i++) {
+
+                controls(deltaTime);
+
+                updatePlayer(deltaTime);
+
+                updateSpheres(deltaTime);
+
+                teleportPlayerIfOob();
+
+            }
+
+            renderer.render(scene, camera);
+
+            stats.update();
+
+        }
+
+    </script>
+
+</body>
+
+</html>
