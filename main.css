@@ -1,47 +1,153 @@
+/* FUENTE Y BODY */
+
 body {
+
     margin: 0;
-    overflow: hidden;
-    font-family: Arial;
+
+    font-family: 'Poppins', sans-serif;
+
+    background: linear-gradient(
+        135deg,
+        #0f2027,
+        #203a43,
+        #2c5364
+    );
+
+    color: white;
+
+    overflow-x: hidden;
 }
+
+/* NAVBAR */
+
+#navbar {
+
+    width: 100%;
+
+    padding: 18px;
+
+    background: rgba(0, 0, 0, 0.5);
+
+    backdrop-filter: blur(10px);
+
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+
+    text-align: center;
+
+    position: sticky;
+
+    top: 0;
+
+    z-index: 1000;
+
+    box-shadow: 0 0 15px rgba(0,0,0,0.4);
+}
+
+#navbar h1 {
+
+    margin: 0;
+
+    font-size: 28px;
+
+    letter-spacing: 2px;
+
+    transition: 0.3s;
+}
+
+#navbar h1:hover {
+
+    color: #ff69b4;
+
+    transform: scale(1.05);
+}
+
+/* INFO */
 
 #info {
-    position: absolute;
-    top: 10px;
-    width: 100%;
+
+    width: fit-content;
+
+    margin: 15px auto;
+
+    padding: 12px 20px;
+
+    background: rgba(0,0,0,0.45);
+
+    backdrop-filter: blur(8px);
+
+    border-radius: 15px;
+
     text-align: center;
-    color: white;
-    z-index: 100;
+
+    font-size: 15px;
+
+    box-shadow: 0 0 15px rgba(0,0,0,0.3);
 }
 
-canvas {
+/* CONTENEDOR 3D */
+
+#container {
+
+    width: 95%;
+
+    height: 85vh;
+
+    margin: 20px auto;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+
+    border: 2px solid rgba(255,255,255,0.1);
+
+    box-shadow:
+        0 0 25px rgba(0,0,0,0.5);
+
+    background: black;
+}
+
+/* EVITA ESPACIOS RAROS */
+
+#container canvas {
+
     display: block;
 }
-#navbar {
-    position: fixed;
-    top: 0;
-    width: 100%;
-    background: rgba(0,0,0,0.7);
-    color: white;
-    text-align: center;
-    padding: 15px;
-    z-index: 1000;
-    font-size: 20px;
-    backdrop-filter: blur(5px);
-}
+
+/* FOOTER */
 
 #footer {
-    position: fixed;
-    bottom: 0;
+
     width: 100%;
-    background: rgba(0,0,0,0.7);
-    color: white;
+
+    margin-top: 20px;
+
+    padding: 20px;
+
+    background: rgba(0,0,0,0.5);
+
+    backdrop-filter: blur(10px);
+
+    border-top: 1px solid rgba(255,255,255,0.1);
+
     text-align: center;
-    padding: 10px;
-    z-index: 1000;
-    font-size: 14px;
-    backdrop-filter: blur(5px);
+
+    line-height: 1.8;
+
+    box-shadow: 0 0 15px rgba(0,0,0,0.4);
 }
 
+/* TEXTO FOOTER */
+
 #footer p {
-    margin: 3px;
+
+    margin: 5px 0;
+
+    font-size: 15px;
+}
+
+/* SCROLL */
+
+html {
+
+    scroll-behavior: smooth;
 }
